@@ -1,0 +1,13 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+/bin/osguardian
+/packaging/deb/usr/bin/osguardian
+/packaging/deb/usr/sbin/osguardiand
+/packaging/dist/
+/packaging/tar/

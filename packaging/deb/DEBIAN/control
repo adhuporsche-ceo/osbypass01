@@ -1,0 +1,10 @@
+Package: osguardian
+Version: 1.0.0
+Section: admin
+Priority: optional
+Architecture: amd64
+Maintainer: OS Guardian Core Team <support@osguardian.io>
+Description: Autonomous Linux Security, Observability & Remediation Platform
+ Native Linux kernel observability, real-time process intelligence,
+ statistical baseline anomaly detection, blast-radius impact analysis,
+ and automated closed-loop remediation daemon for Linux / Kali / Debian / Ubuntu.

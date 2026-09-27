@@ -1,0 +1,204 @@
+OS GUARDIAN PROJECT REPORT
+=========================
+
+Report date: 2026-09-27
+Project version shown by the native CLI: 1.0.0
+Primary target for the supplied executable: 64-bit x86 Linux (x86_64 / amd64)
+
+1. EXECUTIVE SUMMARY
+--------------------
+
+OS Guardian is a Linux system-observation project with three related parts:
+
+1. A native C++ command-line program that reads host and process information from Linux interfaces such as /proc, /etc/os-release, uname, and sysconf.
+2. A daemon mode that periodically samples host telemetry and reports processes above a fixed memory-warning threshold. A systemd unit runs this mode as root.
+3. A React dashboard served by an Express/Node.js application. It polls APIs, visualizes telemetry, provides a controlled fault-demo flow, and exposes package-download routes.
+
+The portable ZIP is for the native CLI and optional daemon only. It does not include or launch the web dashboard. The native command named "impact" reports a heuristic assessment; it does not apply the selected action. The dashboard has separate demo remediation endpoints, including actions on a spawned test worker.
+
+The current implementation is a prototype, not a production autonomous remediation system. Its target architecture document describes capabilities such as daemon IPC, persistent baselines, and policy enforcement that are not implemented by the current native executable.
+
+2. PROJECT LAYOUT
+-----------------
+
+native/src/cli/main.cpp
+  Native CLI command parsing, text/JSON output, impact assessment, and daemon loop.
+
+native/src/telemetry/collector.hpp and collector.cpp
+  Linux telemetry collection for host and process records. Reads Linux process and system data; process metadata includes command line, IDs, state, memory, thread count, cgroup path, and inferred service unit.
+
+native/src/common/types.hpp and native/src/common/raii.hpp
+  Shared native data structures, action labels, process states, and resource ownership helpers.
+
+src/App.tsx and src/components/
+  React dashboard, status views, process explorer, sparklines, demo lifecycle, terminal console, module visualization, and download UI.
+
+server.ts
+  Express API, native-binary invocation, fallback responses, in-memory demo incident state, fault worker management, terminal execution, and package downloads. The development server integrates Vite middleware.
+
+src/common/apiClient.ts and src/types.ts
+  Safe JSON-fetch helper and frontend data contracts.
+
+packaging/deb/
+  Debian package control metadata, post-install script, default configuration, and systemd service unit.
+
+scripts/package.sh, Makefile, CMakeLists.txt
+  Native compilation, tests, and Linux distribution packaging.
+
+docs/ARCHITECTURE.md
+  Architecture/design specification. Some features described there are future design goals, not current runtime behavior.
+
+packaging/dist/osguardian.zip
+  Generated portable ZIP for the native Linux CLI and daemon.
+
+3. NATIVE CLI: CURRENT COMMANDS
+------------------------------
+
+Run "osguardian --help" for built-in help. The implemented command surface is:
+
+  osguardian status
+    Samples host status: hostname, OS and kernel, uptime, CPU, memory, load, process count, and top processes.
+
+  osguardian processes
+    Lists processes found through /proc.
+
+  osguardian inspect PID
+    Displays details for one process, including parent PID, owner IDs, state, memory, threads, nice value, command line, cgroup, and service-unit estimate.
+
+  osguardian impact PID
+    Compares heuristic impact labels for possible actions and prints a selected recommendation. It does not execute that recommendation.
+
+  osguardian policy
+    Prints fixed policy text/JSON. This output is informational; the current native CLI does not enforce automatic remediation.
+
+  osguardian events
+    Currently returns an empty event list / "no active" message.
+
+  osguardian tree [PID]
+    Currently routes to the process-list output. It does not render a process hierarchy, and the optional PID is not used.
+
+  osguardian daemon
+    Runs the foreground telemetry loop. Invoking the installed executable as "osguardiand" enters the same daemon mode.
+
+  osguardian version
+    Prints the version. Global options include --json, --help, and --version.
+
+The collector calculates host CPU usage from /proc/stat deltas, with a short initial sample window. Process CPU estimates are approximate. Access to some process details can be restricted by Linux permissions; use elevated privileges only when required.
+
+4. PORTABLE ZIP: KALI USE
+-------------------------
+
+The ZIP contains:
+  osguardian                 Native CLI executable
+  osguardiand                Same executable, named to select daemon mode
+  osguardian.conf            Default configuration file
+  osguardiand.service        systemd service unit
+  install.sh                 System-wide installer
+  README.md                  Short guide shipped with the ZIP
+
+On Kali x86_64, extract and run directly:
+
+  unzip osguardian.zip
+  cd osguardian-linux-amd64
+  ./osguardian --help
+  ./osguardian status
+  ./osguardian processes
+  ./osguardian inspect 1
+  ./osguardian impact 1
+  ./osguardian status --json
+
+To install command names globally, from inside the extracted directory:
+
+  sudo bash install.sh
+  osguardian status
+
+The installer copies binaries to /usr/bin and /usr/sbin, installs configuration and the service unit, creates runtime/log/state directories, and reloads systemd. It does not enable the service automatically.
+
+To start the optional service and inspect its output:
+
+  sudo systemctl enable --now osguardiand
+  systemctl status osguardiand
+  journalctl -u osguardiand -f
+
+The current daemon samples every two seconds and prints a warning when a process has more than 400 MB resident memory. It does not persist events or execute automated remediation.
+
+To remove a ZIP installation:
+
+  sudo systemctl disable --now osguardiand 2>/dev/null || true
+  sudo rm -f /usr/bin/osguardian /usr/sbin/osguardiand
+  sudo rm -f /lib/systemd/system/osguardiand.service /etc/osguardian/osguardian.conf
+  sudo systemctl daemon-reload
+
+This leaves any log/state directories behind.
+
+5. BUILD AND PACKAGE WORKFLOW
+-----------------------------
+
+Build on Linux, preferably Kali or Debian amd64. Required tools for the ZIP build are a C++20-capable g++, make, and Python 3. On Kali:
+
+  sudo apt update
+  sudo apt install -y build-essential python3
+  make
+  make test
+  make package
+
+"make package" compiles the native executable and creates:
+  packaging/dist/osguardian.zip
+
+The ZIP packaging script creates the archive with executable mode bits for the CLI, daemon, and installer. The provided archive was assembled on Windows from the existing Linux ELF binary because this workspace had no usable WSL distribution or Linux compiler. For a fresh build from the current source, run "make package" on Kali/Linux.
+
+Optional Debian package build:
+
+  sudo apt install -y dpkg-dev
+  make package-deb
+  sudo apt install ./packaging/dist/osguardian.deb
+
+The Debian metadata targets amd64. The native project can also be configured with CMake; it defines TestStatus and TestStatusJson CTest commands. The Makefile test target checks status output and several JSON fields.
+
+6. WEB DASHBOARD AND API
+------------------------
+
+The dashboard is separate from the native ZIP. It uses React/Vite for the UI and Express for the API. The frontend polls status and event APIs, displays process/system telemetry, and includes a controlled-fault demo. The server has endpoints for status, processes, utilization history, inspect, impact, events, fault inject/remediate/verify/reset, terminal execution, and package downloads.
+
+Development startup from the project root:
+
+  npm install
+  npm run dev
+
+The development server defaults to port 3000, binds to 0.0.0.0, and attaches Vite middleware; open http://localhost:3000 locally. Production serves the Vite build from dist and listens on the PORT environment variable. The package scripts include "npm run build", "npm run lint", and "npm start"; npm start runs the compiled dist/server.cjs entry point.
+
+The server invokes the native binary when available, but status/process/inspect/impact routes can return synthetic fallback data on errors. Process history, baselines, and demo incidents are held in memory and are lost when the server restarts. The fault injection route launches a Node.js worker that can consume substantial CPU and memory; use only in a controlled test environment.
+
+7. SECURITY AND OPERATIONAL RISKS
+---------------------------------
+
+IMPORTANT: Do not expose the dashboard server to an untrusted network or run it as root.
+
+- The Express server listens on all interfaces and the API does not implement user authentication. Add authentication/access controls before using it with sensitive data.
+- POST /api/terminal/exec accepts only a restricted set of osguardian commands and invokes the binary without a shell. Arbitrary commands and shell metacharacters are rejected.
+- Production disables fault injection/remediation demo routes. Those routes remain available in development and can spawn a resource-intensive worker and send signals/change priority for that worker.
+- The dashboard runs in a Render container and observes the container environment, not the underlying host. It does not run the systemd service.
+- The systemd unit runs the daemon as root. Review service and installer behavior before enabling it on an important host.
+- UI labels and some API fallbacks imply a more complete autonomous system than the native implementation provides. Confirm real CLI output rather than relying on simulated dashboard values.
+- The provided binary and Debian metadata target x86_64/amd64. They are not suitable for ARM without rebuilding and changing package metadata.
+
+For safe evaluation, use an isolated Kali VM, run the dashboard as an unprivileged user, and keep it behind a trusted access boundary. Do not treat "impact" output as an authorization to terminate or modify a process.
+
+8. RENDER DEPLOYMENT
+--------------------
+
+Dockerfile and render.yaml configure a Render Docker web service. The image uses Node 22, installs C++/Debian packaging tools, builds the native executable and downloadable packages, builds the web assets/server bundle, and starts via "npm start". Render injects PORT, which the server honors. The health check targets the web root.
+
+Deploy by pushing the repository to a Git provider, creating a Render Blueprint from render.yaml, and selecting the repository. Docker was unavailable in the authoring environment, so the image itself was not built locally. A production-mode smoke test confirmed the built server serves the root and status API on a non-default port, rejects arbitrary terminal commands, and returns 404 for demo fault injection.
+
+9. IMPLEMENTED BEHAVIOR VS. DESIGN DOCUMENT
+--------------------------------------------
+
+The current native executable does not implement the UNIX-domain socket IPC, SO_PEERCRED access model, event persistence, EWMA history service, capability-based isolation, or closed-loop policy enforcement described in docs/ARCHITECTURE.md. The current CLI samples Linux interfaces directly; its daemon prints periodic summaries and high-memory warnings. Treat docs/ARCHITECTURE.md as a proposed design specification unless and until the corresponding runtime code is implemented and tested.
+
+10. VERIFICATION STATUS
+----------------------
+
+The ZIP was checked for archive integrity, expected file membership, and executable permissions. The binary was verified to be a 64-bit x86 Linux ELF. This Windows environment could not run the Linux executable, build with make, or execute the Linux test suite. Run "make test" and smoke-test the ZIP on Kali before distributing it or enabling the service on a production host.
+
+END OF REPORT

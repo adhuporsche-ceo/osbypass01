@@ -1,0 +1,16 @@
+[Unit]
+Description=OS Guardian Autonomous Linux Security & Remediation Daemon
+After=network.target local-fs.target
+
+[Service]
+Type=simple
+ExecStart=/usr/sbin/osguardiand
+Restart=always
+RestartSec=3s
+User=root
+StandardOutput=journal
+StandardError=journal
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

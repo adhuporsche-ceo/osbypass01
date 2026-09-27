@@ -1,0 +1,6 @@
+{
+  "name": "OS Guardian",
+  "description": "Distrobyetz autonomous Linux system remediation and telemetry OS platform developed by ~ADHITHYA",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

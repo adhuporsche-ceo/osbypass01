@@ -1,0 +1,29 @@
+#!/bin/sh
+set -e
+
+chmod 755 /usr/bin/osguardian
+chmod 755 /usr/sbin/osguardiand
+chmod 644 /lib/systemd/system/osguardiand.service
+chmod 644 /etc/osguardian/osguardian.conf
+
+mkdir -p /var/log/osguardian /var/lib/osguardian /run/osguardian
+chmod 750 /var/log/osguardian
+
+if [ -d /run/systemd/system ]; then
+    systemctl daemon-reload >/dev/null 2>&1 || true
+fi
+
+echo "=========================================================="
+echo " OS GUARDIAN v1.0.0 Successfully Installed on Linux Host! "
+echo "=========================================================="
+echo " Run CLI directly:"
+echo "   osguardian status"
+echo "   osguardian processes"
+echo "   osguardian inspect <PID>"
+echo "   osguardian impact <PID>"
+echo "   osguardian policy"
+echo ""
+echo " To enable daemon:"
+echo "   sudo systemctl enable --now osguardiand"
+echo "=========================================================="
+exit 0
